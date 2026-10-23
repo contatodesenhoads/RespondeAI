@@ -2,12 +2,11 @@ import { PaginaLegal } from "@/components/PaginaLegal";
 
 export const metadata = { title: "Política de privacidade · Responde AI" };
 
-// Rascunho: revisar com o jurídico e preencher os campos entre colchetes antes da revisão da Meta.
 export default function Privacidade() {
   return (
-    <PaginaLegal titulo="Política de privacidade" atualizado="[data]">
+    <PaginaLegal titulo="Política de privacidade" atualizado="22 de outubro de 2026">
       <p>
-        O Responde AI é um serviço da Desenho Ads ([razão social], CNPJ [CNPJ], [endereço]) que automatiza respostas
+        O Responde AI é um serviço da Desenho Ads (Delon Louis Chauvin, CNPJ 43.781.989/0001-20, Itajaí/SC) que automatiza respostas
         a comentários e mensagens no Instagram de empresas e profissionais. Esta política explica quais dados
         tratamos, para quê e como você pode pedir a exclusão.
       </p>
@@ -49,19 +48,19 @@ export default function Privacidade() {
       <h2>Por quanto tempo guardamos</h2>
       <p>
         Enquanto a conta estiver ativa. Ao desconectar o Instagram ou encerrar a conta, a autorização de acesso é
-        apagada; o histórico de interações é apagado em até [30] dias ou imediatamente, a pedido.
+        apagada; o histórico de interações é apagado em até 30 dias ou imediatamente, a pedido.
       </p>
 
       <h2>Seus direitos e exclusão de dados</h2>
       <p>
-        Você pode pedir acesso, correção ou exclusão dos seus dados, conforme a LGPD, pelo e-mail [e-mail de contato].
+        Você pode pedir acesso, correção ou exclusão dos seus dados, conforme a LGPD, pelo e-mail <a href="mailto:contatodesenhoads@gmail.com">contatodesenhoads@gmail.com</a>.
         Também pode remover o Responde AI a qualquer momento no Instagram, em Configurações › Apps e sites: nesse caso,
         apagamos a autorização e os dados ligados à conta. Veja também a página{" "}
         <a href="/exclusao-de-dados">Exclusão de dados</a>.
       </p>
 
       <h2>Contato</h2>
-      <p>Encarregado de dados: [nome] · [e-mail de contato].</p>
+      <p>Responsável pelo tratamento de dados: Delon Louis Chauvin (Desenho Ads) · <a href="mailto:contatodesenhoads@gmail.com">contatodesenhoads@gmail.com</a>.</p>
     </PaginaLegal>
   );
 }

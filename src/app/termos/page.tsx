@@ -2,12 +2,11 @@ import { PaginaLegal } from "@/components/PaginaLegal";
 
 export const metadata = { title: "Termos de uso · Responde AI" };
 
-// Rascunho: revisar com o jurídico e preencher os campos entre colchetes.
 export default function Termos() {
   return (
-    <PaginaLegal titulo="Termos de uso" atualizado="[data]">
+    <PaginaLegal titulo="Termos de uso" atualizado="22 de outubro de 2026">
       <p>
-        Estes termos regem o uso do Responde AI, serviço da Desenho Ads ([razão social], CNPJ [CNPJ]). Ao usar o
+        Estes termos regem o uso do Responde AI, serviço da Desenho Ads (Delon Louis Chauvin, CNPJ 43.781.989/0001-20, Itajaí/SC). Ao usar o
         serviço, você concorda com eles.
       </p>
       <h2>O serviço</h2>
@@ -27,9 +26,9 @@ export default function Termos() {
         garantimos resultados de engajamento ou vendas.
       </p>
       <h2>Planos e cancelamento</h2>
-      <p>[Condições de pagamento, renovação e cancelamento.]</p>
+      <p>As condições de pagamento, renovação e cancelamento são as informadas no momento da contratação do plano.</p>
       <h2>Contato</h2>
-      <p>[e-mail de contato]</p>
+      <p><a href="mailto:contatodesenhoads@gmail.com">contatodesenhoads@gmail.com</a></p>
     </PaginaLegal>
   );
 }
