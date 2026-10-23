@@ -100,7 +100,7 @@ export async function minhaConta(token: string) {
 // Inscreve a conta para a Meta avisar o servidor sobre comentários e mensagens.
 export async function inscreverWebhooks(token: string) {
   const p = new URLSearchParams({
-    subscribed_fields: "comments,messages,messaging_postbacks",
+    subscribed_fields: "comments,live_comments,messages,messaging_postbacks",
     access_token: token,
   });
   const r = await fetch(`${graph()}/me/subscribed_apps?${p.toString()}`, { method: "POST" });

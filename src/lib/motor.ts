@@ -22,7 +22,7 @@ type Automacao = {
   id: string;
   cliente_id: string;
   nome: string;
-  gatilho: "comentario" | "direct";
+  gatilho: "comentario" | "direct" | "story" | "live";
   post_id: string | null;
   palavra_chave: string;
   resposta_publica: string | null;
@@ -139,14 +139,17 @@ function textoErro(e: unknown) {
 // ---------------------------------------------------------------------
 
 export type Comentario = {
-  id: string;
+  id?: string;
+  comment_id?: string; // alguns avisos (ex.: live) usam este nome
   text?: string;
   from?: { id: string; username?: string };
-  media?: { id: string };
+  media?: { id: string; media_product_type?: string };
 };
 
-export async function processarComentario(conta: Conta, c: Comentario) {
-  if (!c.text || !c.from?.id) return;
+// origem "comentario" = post/reels; "live" = comentário durante uma live.
+export async function processarComentario(conta: Conta, c: Comentario, origem: "comentario" | "live" = "comentario") {
+  const comentarioId = c.id ?? c.comment_id;
+  if (!comentarioId || !c.text || !c.from?.id) return;
   if (c.from.id === conta.ig_user_id) return; // resposta da própria conta
 
   const admin = supabaseAdmin();
@@ -157,28 +160,30 @@ export async function processarComentario(conta: Conta, c: Comentario) {
     .select("id", { count: "exact", head: true })
     .eq("cliente_id", conta.cliente_id)
     .eq("tipo", "comentou")
-    .eq("detalhe->>comentario_id", c.id);
+    .eq("detalhe->>comentario_id", comentarioId);
   if ((count ?? 0) > 0) return;
 
   const lista = await automacoesAtivas(conta.cliente_id);
   const auto = lista.find(
     (a) =>
-      a.gatilho === "comentario" &&
-      (!a.post_id || a.post_id === c.media?.id) &&
+      a.gatilho === origem &&
+      (origem === "live" || !a.post_id || a.post_id === c.media?.id) &&
       casaPalavra(c.text!, a.palavra_chave),
   );
   if (!auto) return;
 
   const contatoId = await salvarContato(conta.cliente_id, c.from.id, { username: c.from.username });
   await registrar(conta.cliente_id, "comentou", auto.id, contatoId, {
-    comentario_id: c.id,
+    origem,
+    comentario_id: comentarioId,
     texto: c.text.slice(0, 300),
     post_id: c.media?.id,
   });
 
-  if (auto.resposta_publica) {
+  // Na live não há resposta pública: só a mensagem no direct.
+  if (origem === "comentario" && auto.resposta_publica) {
     try {
-      await responderComentarioPublico(conta.token, c.id, auto.resposta_publica);
+      await responderComentarioPublico(conta.token, comentarioId, auto.resposta_publica);
     } catch (e) {
       await registrar(conta.cliente_id, "erro", auto.id, contatoId, { etapa: "resposta_publica", erro: textoErro(e) });
     }
@@ -186,15 +191,16 @@ export async function processarComentario(conta: Conta, c: Comentario) {
 
   // Primeira mensagem no direct, com o botão. Se o Instagram não aceitar o
   // botão nesta mensagem, manda só texto pedindo para responder com a palavra.
+  // Na live, a Meta só permite enviar enquanto a transmissão estiver no ar.
   try {
     await respostaPrivada(
       conta.token,
-      c.id,
+      comentarioId,
       mensagemComBotoes(auto.mensagem_dm, [{ titulo: auto.botao_dm, payload: PAYLOAD_QUERO + auto.id }]),
     );
   } catch (e) {
     try {
-      await respostaPrivada(conta.token, c.id, {
+      await respostaPrivada(conta.token, comentarioId, {
         text: `${auto.mensagem_dm}\n\nResponda esta mensagem com “${auto.palavra_chave}” para receber.`,
       });
     } catch (e2) {
@@ -214,7 +220,13 @@ export async function processarComentario(conta: Conta, c: Comentario) {
 export type EventoMensagem = {
   sender: { id: string };
   recipient: { id: string };
-  message?: { mid?: string; text?: string; is_echo?: boolean; quick_reply?: { payload?: string } };
+  message?: {
+    mid?: string;
+    text?: string;
+    is_echo?: boolean;
+    quick_reply?: { payload?: string };
+    reply_to?: { mid?: string; story?: { id?: string; url?: string } };
+  };
   postback?: { mid?: string; title?: string; payload?: string };
 };
 
@@ -241,12 +253,22 @@ export async function processarMensagem(conta: Conta, ev: EventoMensagem) {
   if (!texto) return;
 
   const lista = await automacoesAtivas(conta.cliente_id);
+  const respostaDeStory = Boolean(ev.message?.reply_to?.story);
 
-  // Automação de direct: a palavra-chave chegou numa conversa.
-  const doDirect = lista.find((a) => a.gatilho === "direct" && casaPalavra(texto, a.palavra_chave));
+  // Resposta a story tem prioridade; se nenhuma automação de story casar,
+  // a mensagem ainda pode acionar uma automação de direct.
+  const doStory = respostaDeStory
+    ? lista.find((a) => a.gatilho === "story" && casaPalavra(texto, a.palavra_chave))
+    : undefined;
+  const doDirect = doStory ?? lista.find((a) => a.gatilho === "direct" && casaPalavra(texto, a.palavra_chave));
+
   if (doDirect) {
     const contatoId = await salvarContato(conta.cliente_id, igsid);
-    await registrar(conta.cliente_id, "comentou", doDirect.id, contatoId, { origem: "direct", texto: texto.slice(0, 300) });
+    await registrar(conta.cliente_id, "comentou", doDirect.id, contatoId, {
+      origem: doStory ? "story" : "direct",
+      texto: texto.slice(0, 300),
+      ...(doStory ? { story_id: ev.message?.reply_to?.story?.id } : {}),
+    });
     try {
       await enviarMensagem(
         conta.token,
@@ -261,7 +283,9 @@ export async function processarMensagem(conta: Conta, ev: EventoMensagem) {
   }
 
   // Resposta com a palavra a uma automação de comentário (caso sem botão).
-  const doComentario = lista.find((a) => a.gatilho === "comentario" && casaPalavra(texto, a.palavra_chave));
+  const doComentario = lista.find(
+    (a) => (a.gatilho === "comentario" || a.gatilho === "live") && casaPalavra(texto, a.palavra_chave),
+  );
   if (doComentario) await aoClicarQuero(conta, doComentario, igsid);
 }
 

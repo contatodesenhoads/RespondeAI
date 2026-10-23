@@ -24,7 +24,8 @@ export type EstadoForm = { erro?: string };
 export async function salvarAutomacao(_: EstadoForm, form: FormData): Promise<EstadoForm> {
   const sessao = await sessaoAtual();
   const id = texto(form, "id", 64);
-  const gatilho = texto(form, "gatilho") === "direct" ? "direct" : "comentario";
+  const gatilhoBruto = texto(form, "gatilho");
+  const gatilho = ["comentario", "direct", "story", "live"].includes(gatilhoBruto) ? gatilhoBruto : "comentario";
   const conteudoTipo = ["link", "texto", "arquivo"].includes(texto(form, "conteudo_tipo"))
     ? texto(form, "conteudo_tipo")
     : "link";

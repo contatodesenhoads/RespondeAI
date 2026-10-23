@@ -51,7 +51,7 @@ create table if not exists public.automacoes (
   id uuid primary key default gen_random_uuid(),
   cliente_id uuid not null references public.clientes (id) on delete cascade,
   nome text not null,
-  gatilho text not null default 'comentario' check (gatilho in ('comentario', 'direct')),
+  gatilho text not null default 'comentario' check (gatilho in ('comentario', 'direct', 'story', 'live')),
   post_id text,                -- nulo = qualquer post
   post_legenda text,
   post_miniatura text,

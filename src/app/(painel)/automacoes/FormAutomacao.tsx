@@ -12,10 +12,39 @@ export type PostResumo = {
   data: string;
 };
 
+export type Gatilho = "comentario" | "direct" | "story" | "live";
+
+const GATILHOS: { id: Gatilho; rotulo: string; ajuda: string; rotuloPalavra: string }[] = [
+  {
+    id: "comentario",
+    rotulo: "Comentário em post",
+    ajuda: "Quem comentar a palavra-chave num post ou reels recebe uma resposta pública e o conteúdo no direct.",
+    rotuloPalavra: "Quando alguém comentar",
+  },
+  {
+    id: "direct",
+    rotulo: "Mensagem no direct",
+    ajuda: "Quem mandar a palavra-chave numa conversa no direct recebe o conteúdo.",
+    rotuloPalavra: "Quando alguém mandar no direct",
+  },
+  {
+    id: "story",
+    rotulo: "Resposta a stories",
+    ajuda: "Quem responder um dos seus stories com a palavra-chave recebe o conteúdo. No story, use algo como “Responda com a palavra X”.",
+    rotuloPalavra: "Quando alguém responder um story com",
+  },
+  {
+    id: "live",
+    rotulo: "Comentário em live",
+    ajuda: "Vale para qualquer live sua. Quem comentar a palavra-chave recebe o conteúdo no direct. Pela regra do Instagram, a mensagem só pode ser enviada enquanto a live estiver no ar.",
+    rotuloPalavra: "Quando alguém comentar na live",
+  },
+];
+
 export type ValoresAutomacao = {
   id?: string;
   nome: string;
-  gatilho: "comentario" | "direct";
+  gatilho: Gatilho;
   post_id: string | null;
   palavra_chave: string;
   resposta_publica: string;
@@ -73,6 +102,14 @@ export function FormAutomacao({
   const muda = <K extends keyof ValoresAutomacao>(k: K, valor: ValoresAutomacao[K]) => setV((x) => ({ ...x, [k]: valor }));
   const postEscolhido = posts.find((p) => p.id === v.post_id);
   const perfil = username ? `@${username}` : "o perfil";
+  const gatilhoAtual = GATILHOS.find((g) => g.id === v.gatilho) ?? GATILHOS[0];
+  const emPost = v.gatilho === "comentario";
+
+  // Numeração das etapas conforme o gatilho escolhido.
+  const etapas = ["palavra", "dm", "seguir", "conteudo"];
+  if (emPost) etapas.unshift("post");
+  if (emPost) etapas.splice(etapas.indexOf("dm"), 0, "publica");
+  const n = (etapa: string) => etapas.indexOf(etapa) + 1;
 
   return (
     <form action={acao} className="flex flex-wrap items-start gap-6">
@@ -89,13 +126,17 @@ export function FormAutomacao({
           <input id="nome" name="nome" required value={v.nome} onChange={(e) => muda("nome", e.target.value)} placeholder="Ex.: Prompt de roteiros" className={`${campo} h-[46px]`} />
           <span className={rotulo}>Quando acionar</span>
           <div className="flex flex-wrap gap-2">
-            <Pilula ativo={v.gatilho === "comentario"} onClick={() => muda("gatilho", "comentario")}>Comentário em post</Pilula>
-            <Pilula ativo={v.gatilho === "direct"} onClick={() => muda("gatilho", "direct")}>Mensagem no direct</Pilula>
+            {GATILHOS.map((g) => (
+              <Pilula key={g.id} ativo={v.gatilho === g.id} onClick={() => muda("gatilho", g.id)}>
+                {g.rotulo}
+              </Pilula>
+            ))}
           </div>
+          <p className={ajuda}>{gatilhoAtual.ajuda}</p>
         </Secao>
 
-        {v.gatilho === "comentario" && (
-          <Secao titulo="1. Escolha o post">
+        {emPost && (
+          <Secao titulo={`${n("post")}. Escolha o post`}>
             {erroPosts && <p className="rounded-lg bg-alerta-fundo px-3 py-2 text-sm text-alerta">Não foi possível carregar seus posts agora. Você pode usar “Qualquer post”.</p>}
             <div className="grid grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2.5">
               <button
@@ -134,22 +175,22 @@ export function FormAutomacao({
           </Secao>
         )}
 
-        <Secao titulo={v.gatilho === "comentario" ? "2. Palavra-chave" : "1. Palavra-chave"}>
+        <Secao titulo={`${n("palavra")}. Palavra-chave`}>
           <label htmlFor="palavra_chave" className={rotulo}>
-            {v.gatilho === "comentario" ? "Quando alguém comentar" : "Quando alguém mandar no direct"}
+            {gatilhoAtual.rotuloPalavra}
           </label>
           <input id="palavra_chave" name="palavra_chave" required value={v.palavra_chave} onChange={(e) => muda("palavra_chave", e.target.value)} placeholder="prompt" className={`${campo} h-[46px]`} />
           <p className={ajuda}>Funciona com maiúsculas, minúsculas e acentos: “Prompt”, “PROMPT” e “prompt!” acionam igual.</p>
         </Secao>
 
-        {v.gatilho === "comentario" && (
-          <Secao titulo="3. Resposta pública ao comentário">
+        {emPost && (
+          <Secao titulo={`${n("publica")}. Resposta pública ao comentário`}>
             <label htmlFor="resposta_publica" className={rotulo}>O que aparece embaixo do comentário (opcional)</label>
             <textarea id="resposta_publica" name="resposta_publica" rows={2} value={v.resposta_publica} onChange={(e) => muda("resposta_publica", e.target.value)} className={`${campo} py-3`} />
           </Secao>
         )}
 
-        <Secao titulo={`${v.gatilho === "comentario" ? "4" : "2"}. Primeira mensagem no direct`}>
+        <Secao titulo={`${n("dm")}. Primeira mensagem no direct`}>
           <label htmlFor="mensagem_dm" className={rotulo}>Mensagem</label>
           <textarea id="mensagem_dm" name="mensagem_dm" required rows={2} maxLength={640} value={v.mensagem_dm} onChange={(e) => muda("mensagem_dm", e.target.value)} className={`${campo} py-3`} />
           <label htmlFor="botao_dm" className={rotulo}>Texto do botão</label>
@@ -162,7 +203,7 @@ export function FormAutomacao({
           titulo={
             <div className="flex items-center justify-between gap-4">
               <div className="flex flex-col gap-1">
-                <h2 className="text-[17px] font-bold">{v.gatilho === "comentario" ? "5" : "3"}. Exigir que siga o perfil</h2>
+                <h2 className="text-[17px] font-bold">{n("seguir")}. Exigir que siga o perfil</h2>
                 <p className="text-sm text-suave">Quem não segue recebe um convite antes do conteúdo.</p>
               </div>
               <button
@@ -189,7 +230,7 @@ export function FormAutomacao({
           )}
         </Secao>
 
-        <Secao titulo={`${v.gatilho === "comentario" ? "6" : "4"}. Conteúdo a entregar`}>
+        <Secao titulo={`${n("conteudo")}. Conteúdo a entregar`}>
           <div className="flex flex-wrap gap-2">
             <Pilula ativo={v.conteudo_tipo === "link"} onClick={() => muda("conteudo_tipo", "link")}>Link</Pilula>
             <Pilula ativo={v.conteudo_tipo === "texto"} onClick={() => muda("conteudo_tipo", "texto")}>Texto</Pilula>

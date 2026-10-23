@@ -56,7 +56,8 @@ export async function POST(request: NextRequest) {
       if (!conta) continue;
 
       for (const mudanca of entrada.changes ?? []) {
-        if (mudanca.field === "comments") await processarComentario(conta, mudanca.value);
+        if (mudanca.field === "comments") await processarComentario(conta, mudanca.value, "comentario");
+        if (mudanca.field === "live_comments") await processarComentario(conta, mudanca.value, "live");
       }
       for (const ev of entrada.messaging ?? []) {
         await processarMensagem(conta, ev);

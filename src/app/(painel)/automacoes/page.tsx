@@ -113,7 +113,16 @@ export default async function Automacoes({
                           {a.nome}
                         </Link>
                         <div className="text-[13px] text-suave">
-                          {a.gatilho === "direct" ? "Direct" : a.post_id ? "Post específico" : "Qualquer post"} · criada {tempoRelativo(a.criado_em)}
+                          {a.gatilho === "direct"
+                            ? "Direct"
+                            : a.gatilho === "story"
+                              ? "Resposta a stories"
+                              : a.gatilho === "live"
+                                ? "Comentário em live"
+                                : a.post_id
+                                  ? "Post específico"
+                                  : "Qualquer post"}{" "}
+                          · criada {tempoRelativo(a.criado_em)}
                         </div>
                       </td>
                       <td className={td}>
