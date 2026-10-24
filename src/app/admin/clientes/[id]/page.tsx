@@ -87,6 +87,8 @@ export default async function AdminCliente({ params }: { params: Promise<{ id: s
                 {c.status === "ativo" && (
                   <form action={mudarStatusCliente} className="flex flex-col gap-3">
                     <input type="hidden" name="id" value={c.id} />
+                    {/* Preenchido pelo botão clicado (Pausar ou Cancelar) antes do envio */}
+                    <input type="hidden" name="status" defaultValue="" />
                     <label htmlFor="motivo" className="text-sm font-semibold">Motivo (opcional)</label>
                     <input id="motivo" name="motivo" maxLength={300} placeholder="Ex.: pagamento em atraso" className="h-[46px] rounded-[10px] border border-campo bg-white px-3.5 text-[15px]" />
                     <div className="flex flex-wrap gap-2">

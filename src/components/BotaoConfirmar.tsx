@@ -1,6 +1,8 @@
 "use client";
 
 // Botão de envio que pede confirmação antes (ex.: excluir, desconectar, pausar).
+// Com nome/valor, grava o valor num campo oculto de mesmo nome no formulário,
+// para o servidor saber qual botão foi clicado em qualquer navegador.
 export function BotaoConfirmar({
   pergunta,
   children,
@@ -17,11 +19,16 @@ export function BotaoConfirmar({
   return (
     <button
       type="submit"
-      name={nome}
-      value={valor}
       className={className}
       onClick={(e) => {
-        if (!window.confirm(pergunta)) e.preventDefault();
+        if (!window.confirm(pergunta)) {
+          e.preventDefault();
+          return;
+        }
+        if (nome && valor !== undefined) {
+          const campo = e.currentTarget.form?.querySelector<HTMLInputElement>(`input[type="hidden"][name="${nome}"]`);
+          if (campo) campo.value = valor;
+        }
       }}
     >
       {children}
