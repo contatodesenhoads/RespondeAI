@@ -67,6 +67,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
         <Indicador rotulo="Conteúdos entregues" valor={numero(g.entregou)} />
         <Indicador rotulo="Novos seguidores" valor={numero(g.seguiu)} destaque />
         <Indicador rotulo="Taxa de conversão" valor={pct(g.entregou)} nota="entregues ÷ comentários" />
+        {(g.capturou_lead > 0 || g.remarketing > 0) && (
+          <Indicador rotulo="Leads capturados" valor={numero(g.capturou_lead)} nota={`${numero(g.remarketing)} remarketing(s) enviados`} />
+        )}
       </div>
 
       <Cartao className="flex flex-col gap-4">
@@ -94,12 +97,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <section className="flex flex-col rounded-[14px] border border-linha bg-white">
         <h2 className="px-6 pb-2 pt-6 text-lg font-bold">Desempenho por automação</h2>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-[15px]">
+          <table className="w-full min-w-[800px] border-collapse text-[15px]">
             <thead>
               <tr className="text-left text-[13px] text-suave">
                 <th className={th}>Automação</th>
                 <th className={`${th} text-right`}>Comentários</th>
                 <th className={`${th} text-right`}>Novos seguidores</th>
+                <th className={`${th} text-right`}>Leads</th>
                 <th className={`${th} text-right`}>Entregas</th>
                 <th className={`${th} text-right`}>Cliques no link</th>
               </tr>
@@ -110,13 +114,14 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                   <td className={`${td} font-semibold`}>{a.nome}</td>
                   <td className={`${td} text-right`}>{numero(a.t!.comentou)}</td>
                   <td className={`${td} text-right`}>{numero(a.t!.seguiu)}</td>
+                  <td className={`${td} text-right`}>{numero(a.t!.capturou_lead)}</td>
                   <td className={`${td} text-right`}>{numero(a.t!.entregou)}</td>
                   <td className={`${td} text-right`}>{numero(a.t!.clicou_link)}</td>
                 </tr>
               ))}
               {linhas.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-suave">Sem movimento neste período ainda.</td>
+                  <td colSpan={6} className="px-6 py-10 text-center text-suave">Sem movimento neste período ainda.</td>
                 </tr>
               )}
             </tbody>

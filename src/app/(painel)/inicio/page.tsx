@@ -13,6 +13,8 @@ const FRASES: Record<string, string> = {
   ja_seguia: "já seguia o perfil",
   pediu_seguir: "ainda não segue: convite enviado",
   seguiu: "seguiu o perfil",
+  capturou_lead: "deixou o contato",
+  remarketing: "recebeu o remarketing",
   entregou: "recebeu o conteúdo",
   clicou_link: "abriu o link entregue",
   erro: "teve uma falha no envio",

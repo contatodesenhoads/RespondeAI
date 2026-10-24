@@ -7,8 +7,10 @@ export type Totais = {
   ja_seguia: number;
   pediu_seguir: number;
   seguiu: number;
+  capturou_lead: number;
   entregou: number;
   clicou_link: number;
+  remarketing: number;
   erro: number;
 };
 
@@ -18,8 +20,10 @@ const VAZIO: Totais = {
   ja_seguia: 0,
   pediu_seguir: 0,
   seguiu: 0,
+  capturou_lead: 0,
   entregou: 0,
   clicou_link: 0,
+  remarketing: 0,
   erro: 0,
 };
 

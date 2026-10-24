@@ -6,6 +6,8 @@ import { Cabecalho, SeloStatus } from "@/components/ui";
 import { BotaoConfirmar } from "@/components/BotaoConfirmar";
 import { FormAutomacao } from "../FormAutomacao";
 import { postsDoCliente } from "../posts";
+import { planoDe } from "@/lib/planos";
+import { MENSAGEM_CAPTURA_PADRAO } from "@/lib/regras";
 import { excluirAutomacao } from "../acoes";
 
 export const metadata = { title: "Editar automação · Responde AI" };
@@ -36,6 +38,8 @@ export default async function EditarAutomacao({ params }: { params: Promise<{ id
         posts={posts}
         erroPosts={erro}
         username={sessao.instagram?.username ?? null}
+        recursos={planoDe(sessao.plano).recursos}
+        clienteId={sessao.clienteId}
         inicial={{
           id: a.id,
           nome: a.nome,
@@ -43,14 +47,26 @@ export default async function EditarAutomacao({ params }: { params: Promise<{ id
           post_id: a.post_id,
           palavra_chave: a.palavra_chave,
           resposta_publica: a.resposta_publica ?? "",
+          resposta_publica_2: a.resposta_publica_2 ?? "",
           mensagem_dm: a.mensagem_dm,
           botao_dm: a.botao_dm,
           exige_seguir: a.exige_seguir,
           mensagem_seguir: a.mensagem_seguir ?? "",
           botao_seguir: a.botao_seguir,
-          conteudo_tipo: a.conteudo_tipo,
+          captura_ativa: Boolean(a.captura_ativa),
+          captura_tipo: a.captura_tipo === "whatsapp" ? "whatsapp" : "email",
+          captura_mensagem: a.captura_mensagem ?? MENSAGEM_CAPTURA_PADRAO[a.captura_tipo === "whatsapp" ? "whatsapp" : "email"],
+          conteudo_tipo: a.conteudo_tipo === "midia" ? "midia" : a.conteudo_tipo === "texto" ? "texto" : "link",
           mensagem_entrega: a.mensagem_entrega,
           conteudo_url: a.conteudo_url ?? "",
+          midia_path: a.midia_path ?? "",
+          midia_tipo: a.midia_tipo ?? "",
+          midia_nome: a.midia_nome ?? "",
+          midia_tamanho: Number(a.midia_tamanho ?? 0),
+          midia_url: a.midia_url ?? "",
+          remarketing_ativo: Boolean(a.remarketing_ativo),
+          remarketing_mensagem: a.remarketing_mensagem ?? "E aí, o que achou do conteúdo? Se tiver qualquer dúvida, é só me responder aqui.",
+          remarketing_horas: Number(a.remarketing_horas ?? 2),
         }}
       />
       <form action={excluirAutomacao} className="flex justify-start border-t border-linha pt-6">

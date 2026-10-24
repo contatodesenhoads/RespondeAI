@@ -2,6 +2,7 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { descriptografar } from "@/lib/cripto";
 import { env } from "@/lib/env";
+import { temRecurso } from "@/lib/planos";
 import {
   enviarMensagem,
   mensagemComBotoes,
@@ -9,14 +10,24 @@ import {
   respostaPrivada,
   responderComentarioPublico,
 } from "@/lib/instagram";
+import {
+  escolherResposta,
+  normalizarWhatsapp,
+  validarEmail,
+  casaPalavra,
+  MENSAGEM_CAPTURA_PADRAO,
+} from "@/lib/regras";
+
+export { casaPalavra, normalizar } from "@/lib/regras";
 
 // =====================================================================
 // Motor das automações
 // Fluxo: comentário → resposta pública → DM com botão → (verifica se segue)
-//        → pede para seguir + "Já segui" → entrega o conteúdo
+//        → pede para seguir + "Já segui" → (pede e-mail/WhatsApp)
+//        → entrega o conteúdo (texto, link ou mídia) → (remarketing)
 // =====================================================================
 
-type Conta = { cliente_id: string; ig_user_id: string; token: string };
+export type Conta = { cliente_id: string; ig_user_id: string; token: string; plano: string };
 
 type Automacao = {
   id: string;
@@ -26,57 +37,64 @@ type Automacao = {
   post_id: string | null;
   palavra_chave: string;
   resposta_publica: string | null;
+  resposta_publica_2: string | null;
   mensagem_dm: string;
   botao_dm: string;
   exige_seguir: boolean;
   mensagem_seguir: string | null;
   botao_seguir: string;
-  conteudo_tipo: "link" | "texto" | "arquivo";
+  captura_ativa: boolean;
+  captura_tipo: "email" | "whatsapp";
+  captura_mensagem: string | null;
+  conteudo_tipo: "link" | "texto" | "arquivo" | "midia";
   mensagem_entrega: string;
   conteudo_url: string | null;
+  midia_url: string | null;
+  midia_tipo: "image" | "video" | "audio" | "file" | null;
+  remarketing_ativo: boolean;
+  remarketing_mensagem: string | null;
+  remarketing_horas: number;
 };
 
 const PAYLOAD_QUERO = "RAI:Q:";
 const PAYLOAD_SEGUI = "RAI:S:";
+const HORA = 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------
 // Utilidades
 // ---------------------------------------------------------------------
 
-export function normalizar(texto: string) {
-  return texto
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// A palavra-chave precisa aparecer como palavra inteira:
-// "prompt" casa com "Quero o PROMPT!", mas não com "prompts".
-export function casaPalavra(texto: string, palavra: string) {
-  const t = ` ${normalizar(texto)} `;
-  const p = normalizar(palavra);
-  return p.length > 0 && t.includes(` ${p} `);
-}
-
-export async function contaPorIgUserId(igUserId: string): Promise<Conta | null> {
-  const { data } = await supabaseAdmin()
-    .from("contas_instagram")
-    .select("cliente_id, ig_user_id, token_criptografado, status, clientes(status)")
-    .eq("ig_user_id", igUserId)
-    .maybeSingle();
-  if (!data?.token_criptografado || data.status !== "conectada") return null;
-
+function contaDeLinha(data: {
+  cliente_id: string;
+  ig_user_id: string;
+  token_criptografado: string | null;
+  status: string;
+  clientes: unknown;
+}): Conta | null {
+  if (!data.token_criptografado || data.status !== "conectada") return null;
   // Bloqueio automático: cliente pausado ou cancelado não tem automações rodando.
-  const cliente = Array.isArray(data.clientes) ? data.clientes[0] : data.clientes;
-  if (cliente && (cliente as { status?: string }).status !== "ativo") return null;
+  const cliente = (Array.isArray(data.clientes) ? data.clientes[0] : data.clientes) as
+    | { status?: string; plano?: string }
+    | null;
+  if (cliente && cliente.status !== "ativo") return null;
   return {
     cliente_id: data.cliente_id,
     ig_user_id: data.ig_user_id,
     token: descriptografar(data.token_criptografado),
+    plano: cliente?.plano ?? "essencial",
   };
+}
+
+const CAMPOS_CONTA = "cliente_id, ig_user_id, token_criptografado, status, clientes(status, plano)";
+
+export async function contaPorIgUserId(igUserId: string): Promise<Conta | null> {
+  const { data } = await supabaseAdmin().from("contas_instagram").select(CAMPOS_CONTA).eq("ig_user_id", igUserId).maybeSingle();
+  return data ? contaDeLinha(data) : null;
+}
+
+export async function contaPorCliente(clienteId: string): Promise<Conta | null> {
+  const { data } = await supabaseAdmin().from("contas_instagram").select(CAMPOS_CONTA).eq("cliente_id", clienteId).maybeSingle();
+  return data ? contaDeLinha(data) : null;
 }
 
 async function automacoesAtivas(clienteId: string): Promise<Automacao[]> {
@@ -99,17 +117,12 @@ async function automacaoPorId(clienteId: string, id: string): Promise<Automacao 
   return (data as Automacao) ?? null;
 }
 
-async function salvarContato(clienteId: string, igsid: string, extra: { username?: string; segue?: boolean } = {}) {
+async function salvarContato(clienteId: string, igsid: string, extra: Record<string, unknown> = {}) {
+  const limpo = Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined));
   const { data } = await supabaseAdmin()
     .from("contatos")
     .upsert(
-      {
-        cliente_id: clienteId,
-        igsid,
-        ultima_interacao: new Date().toISOString(),
-        ...(extra.username ? { username: extra.username } : {}),
-        ...(extra.segue !== undefined ? { segue: extra.segue } : {}),
-      },
+      { cliente_id: clienteId, igsid, ultima_interacao: new Date().toISOString(), ...limpo },
       { onConflict: "cliente_id,igsid" },
     )
     .select("id")
@@ -184,10 +197,11 @@ export async function processarComentario(conta: Conta, c: Comentario, origem: "
     post_id: c.media?.id,
   });
 
-  // Na live não há resposta pública: só a mensagem no direct.
-  if (origem === "comentario" && auto.resposta_publica) {
+  // Resposta pública (alterna entre as variações). Na live não há resposta pública.
+  const resposta = escolherResposta([auto.resposta_publica, auto.resposta_publica_2]);
+  if (origem === "comentario" && resposta) {
     try {
-      await responderComentarioPublico(conta.token, comentarioId, auto.resposta_publica);
+      await responderComentarioPublico(conta.token, comentarioId, resposta);
     } catch (e) {
       await registrar(conta.cliente_id, "erro", auto.id, contatoId, { etapa: "resposta_publica", erro: textoErro(e) });
     }
@@ -256,6 +270,9 @@ export async function processarMensagem(conta: Conta, ev: EventoMensagem) {
   const texto = ev.message?.text;
   if (!texto) return;
 
+  // Pessoa estava respondendo o pedido de e-mail/WhatsApp?
+  if (await tratarRespostaDeCaptura(conta, igsid, texto)) return;
+
   const lista = await automacoesAtivas(conta.cliente_id);
   const respostaDeStory = Boolean(ev.message?.reply_to?.story);
 
@@ -298,7 +315,7 @@ async function aoClicarQuero(conta: Conta, auto: Automacao, igsid: string) {
   await registrar(conta.cliente_id, "clicou_botao", auto.id, contatoId);
 
   if (!auto.exige_seguir) {
-    await entregar(conta, auto, igsid, contatoId);
+    await seguirParaEntrega(conta, auto, igsid, contatoId);
     return;
   }
 
@@ -307,7 +324,7 @@ async function aoClicarQuero(conta: Conta, auto: Automacao, igsid: string) {
     contatoId = await salvarContato(conta.cliente_id, igsid, perfil);
     if (perfil.segue) {
       await registrar(conta.cliente_id, "ja_seguia", auto.id, contatoId);
-      await entregar(conta, auto, igsid, contatoId);
+      await seguirParaEntrega(conta, auto, igsid, contatoId);
     } else {
       await registrar(conta.cliente_id, "pediu_seguir", auto.id, contatoId);
       await pedirParaSeguir(conta, auto, igsid);
@@ -324,7 +341,7 @@ async function aoClicarJaSegui(conta: Conta, auto: Automacao, igsid: string) {
     contatoId = await salvarContato(conta.cliente_id, igsid, perfil);
     if (perfil.segue) {
       await registrar(conta.cliente_id, "seguiu", auto.id, contatoId);
-      await entregar(conta, auto, igsid, contatoId);
+      await seguirParaEntrega(conta, auto, igsid, contatoId);
     } else {
       await enviarMensagem(
         conta.token,
@@ -351,17 +368,223 @@ async function pedirParaSeguir(conta: Conta, auto: Automacao, igsid: string) {
   );
 }
 
-async function entregar(conta: Conta, auto: Automacao, igsid: string, contatoId: string | undefined) {
-  let texto = auto.mensagem_entrega;
-  if (auto.conteudo_url && auto.conteudo_tipo !== "texto") {
-    // Link rastreável: conta os cliques no dashboard e redireciona.
-    const link = `${env.siteUrl()}/l/${auto.id}${contatoId ? `?c=${contatoId}` : ""}`;
-    texto = `${texto}\n\n${link}`;
+// ---------------------------------------------------------------------
+// 3. Captura de e-mail ou WhatsApp (plano Completo)
+// ---------------------------------------------------------------------
+
+async function seguirParaEntrega(conta: Conta, auto: Automacao, igsid: string, contatoId: string | undefined) {
+  if (!auto.captura_ativa || !temRecurso(conta.plano, "captura_lead")) {
+    await entregar(conta, auto, igsid, contatoId);
+    return;
   }
+
+  // Quem já deixou o dado antes não precisa informar de novo.
+  const { data: contato } = await supabaseAdmin()
+    .from("contatos")
+    .select("email, whatsapp")
+    .eq("cliente_id", conta.cliente_id)
+    .eq("igsid", igsid)
+    .maybeSingle();
+  if ((auto.captura_tipo === "email" && contato?.email) || (auto.captura_tipo === "whatsapp" && contato?.whatsapp)) {
+    await entregar(conta, auto, igsid, contatoId);
+    return;
+  }
+
+  await salvarContato(conta.cliente_id, igsid, {
+    aguardando_automacao_id: auto.id,
+    aguardando_desde: new Date().toISOString(),
+  });
+  try {
+    await enviarMensagem(conta.token, igsid, {
+      text: (auto.captura_mensagem || MENSAGEM_CAPTURA_PADRAO[auto.captura_tipo]).slice(0, 1000),
+    });
+  } catch (e) {
+    await registrar(conta.cliente_id, "erro", auto.id, contatoId, { etapa: "captura_pedido", erro: textoErro(e) });
+  }
+}
+
+// Retorna true se a mensagem era a resposta ao pedido de e-mail/WhatsApp.
+async function tratarRespostaDeCaptura(conta: Conta, igsid: string, texto: string): Promise<boolean> {
+  const admin = supabaseAdmin();
+  const { data: contato } = await admin
+    .from("contatos")
+    .select("id, aguardando_automacao_id, aguardando_desde")
+    .eq("cliente_id", conta.cliente_id)
+    .eq("igsid", igsid)
+    .maybeSingle();
+  if (!contato?.aguardando_automacao_id || !contato.aguardando_desde) return false;
+
+  // Fora da janela de 24 h, esquece o pedido.
+  if (Date.now() - new Date(contato.aguardando_desde).getTime() > 24 * HORA) {
+    await admin.from("contatos").update({ aguardando_automacao_id: null, aguardando_desde: null }).eq("id", contato.id);
+    return false;
+  }
+
+  const auto = await automacaoPorId(conta.cliente_id, contato.aguardando_automacao_id);
+  if (!auto) {
+    await admin.from("contatos").update({ aguardando_automacao_id: null, aguardando_desde: null }).eq("id", contato.id);
+    return false;
+  }
+
+  const valor = auto.captura_tipo === "email" ? validarEmail(texto) : normalizarWhatsapp(texto);
+  if (!valor) {
+    const pedido =
+      auto.captura_tipo === "email"
+        ? "Hmm, não parece um e-mail válido. Pode mandar de novo? Ex.: nome@email.com"
+        : "Hmm, não parece um número válido. Pode mandar de novo com DDD? Ex.: 47 99999-9999";
+    try {
+      await enviarMensagem(conta.token, igsid, { text: pedido });
+    } catch {
+      // segue esperando
+    }
+    return true;
+  }
+
+  await admin
+    .from("contatos")
+    .update({
+      [auto.captura_tipo]: valor,
+      aguardando_automacao_id: null,
+      aguardando_desde: null,
+      ultima_interacao: new Date().toISOString(),
+    })
+    .eq("id", contato.id);
+  await registrar(conta.cliente_id, "capturou_lead", auto.id, contato.id, { tipo: auto.captura_tipo });
+  await entregar(conta, auto, igsid, contato.id);
+  return true;
+}
+
+// ---------------------------------------------------------------------
+// 4. Entrega (texto, link ou mídia) e agendamento do remarketing
+// ---------------------------------------------------------------------
+
+async function entregar(conta: Conta, auto: Automacao, igsid: string, contatoId: string | undefined) {
+  const linkRastreavel = `${env.siteUrl()}/l/${auto.id}${contatoId ? `?c=${contatoId}` : ""}`;
+  const comMidia = auto.conteudo_tipo === "midia" && auto.midia_url && auto.midia_tipo;
+  const midiaLiberada = comMidia && temRecurso(conta.plano, "midia");
+
+  let texto = auto.mensagem_entrega;
+  if (auto.conteudo_url && (auto.conteudo_tipo === "link" || auto.conteudo_tipo === "arquivo")) {
+    // Link rastreável: conta os cliques no dashboard e redireciona.
+    texto = `${texto}\n\n${linkRastreavel}`;
+  }
+  // Plano sem mídia (ex.: fez downgrade): a pessoa ainda recebe o arquivo como link.
+  if (comMidia && !midiaLiberada) texto = `${texto}\n\n${auto.midia_url}`;
+
   try {
     await enviarMensagem(conta.token, igsid, { text: texto.slice(0, 1000) });
+    if (midiaLiberada) await enviarMidia(conta, auto, igsid);
     await registrar(conta.cliente_id, "entregou", auto.id, contatoId);
   } catch (e) {
     await registrar(conta.cliente_id, "erro", auto.id, contatoId, { etapa: "entrega", erro: textoErro(e) });
+    return;
   }
+
+  await agendarRemarketing(conta, auto, igsid, contatoId);
+}
+
+async function enviarMidia(conta: Conta, auto: Automacao, igsid: string) {
+  const anexo = { type: auto.midia_tipo, payload: { url: auto.midia_url } };
+  try {
+    await enviarMensagem(conta.token, igsid, { attachment: anexo });
+  } catch (e) {
+    // Formato alternativo documentado para imagens.
+    if (auto.midia_tipo === "image") {
+      try {
+        await enviarMensagem(conta.token, igsid, { attachments: anexo });
+        return;
+      } catch {
+        // cai no link abaixo
+      }
+    }
+    // Último recurso: manda o arquivo como link, para a pessoa não ficar sem.
+    await enviarMensagem(conta.token, igsid, { text: `Seu arquivo: ${auto.midia_url}` });
+    await registrar(conta.cliente_id, "erro", auto.id, undefined, { etapa: "entrega_midia", erro: textoErro(e) });
+  }
+}
+
+async function agendarRemarketing(conta: Conta, auto: Automacao, igsid: string, contatoId: string | undefined) {
+  if (!auto.remarketing_ativo || !auto.remarketing_mensagem || !temRecurso(conta.plano, "remarketing")) return;
+  const admin = supabaseAdmin();
+
+  // Um remarketing por pessoa por automação, enquanto houver um pendente.
+  if (contatoId) {
+    const { count } = await admin
+      .from("envios_agendados")
+      .select("id", { count: "exact", head: true })
+      .eq("automacao_id", auto.id)
+      .eq("contato_id", contatoId)
+      .eq("status", "pendente");
+    if ((count ?? 0) > 0) return;
+  }
+
+  const horas = Math.min(23, Math.max(1, auto.remarketing_horas || 2));
+  const agora = Date.now();
+  await admin.from("envios_agendados").insert({
+    cliente_id: conta.cliente_id,
+    automacao_id: auto.id,
+    contato_id: contatoId ?? null,
+    igsid,
+    mensagem: auto.remarketing_mensagem,
+    enviar_em: new Date(agora + horas * HORA).toISOString(),
+    janela_ate: new Date(agora + 24 * HORA - 5 * 60 * 1000).toISOString(),
+  });
+}
+
+// ---------------------------------------------------------------------
+// 5. Envio dos remarketings vencidos (chamado pelo agendador)
+// ---------------------------------------------------------------------
+
+export async function enviarRemarketingsPendentes(limite = 50) {
+  const admin = supabaseAdmin();
+  const agora = new Date().toISOString();
+  const { data: lista } = await admin
+    .from("envios_agendados")
+    .select("id, cliente_id, automacao_id, contato_id, igsid, mensagem, janela_ate")
+    .eq("status", "pendente")
+    .lte("enviar_em", agora)
+    .order("enviar_em", { ascending: true })
+    .limit(limite);
+
+  const resultado = { enviados: 0, expirados: 0, cancelados: 0, erros: 0 };
+  const contas = new Map<string, Conta | null>();
+
+  for (const envio of lista ?? []) {
+    // Marca antes de enviar, para duas execuções nunca mandarem a mesma mensagem.
+    const { data: pego } = await admin
+      .from("envios_agendados")
+      .update({ status: "enviado", enviado_em: new Date().toISOString() })
+      .eq("id", envio.id)
+      .eq("status", "pendente")
+      .select("id")
+      .maybeSingle();
+    if (!pego) continue;
+
+    if (new Date(envio.janela_ate).getTime() < Date.now()) {
+      await admin.from("envios_agendados").update({ status: "expirado" }).eq("id", envio.id);
+      resultado.expirados++;
+      continue;
+    }
+
+    if (!contas.has(envio.cliente_id)) contas.set(envio.cliente_id, await contaPorCliente(envio.cliente_id));
+    const conta = contas.get(envio.cliente_id);
+    if (!conta || !temRecurso(conta.plano, "remarketing")) {
+      await admin.from("envios_agendados").update({ status: "cancelado" }).eq("id", envio.id);
+      resultado.cancelados++;
+      continue;
+    }
+
+    try {
+      await enviarMensagem(conta.token, envio.igsid, { text: String(envio.mensagem).slice(0, 1000) });
+      await registrar(conta.cliente_id, "remarketing", envio.automacao_id, envio.contato_id ?? undefined);
+      resultado.enviados++;
+    } catch (e) {
+      await admin
+        .from("envios_agendados")
+        .update({ status: "erro", erro: textoErro(e).slice(0, 500), tentativas: 1 })
+        .eq("id", envio.id);
+      resultado.erros++;
+    }
+  }
+  return resultado;
 }
