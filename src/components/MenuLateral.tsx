@@ -20,7 +20,15 @@ const ITENS = [
   },
 ];
 
-export function MenuLateral({ username, conectado }: { username: string | null; conectado: boolean }) {
+export function MenuLateral({
+  username,
+  conectado,
+  admin = false,
+}: {
+  username: string | null;
+  conectado: boolean;
+  admin?: boolean;
+}) {
   const caminho = usePathname();
 
   return (
@@ -54,6 +62,17 @@ export function MenuLateral({ username, conectado }: { username: string | null; 
           );
         })}
       </div>
+      {admin && (
+        <Link
+          href="/admin"
+          className="flex min-h-11 items-center gap-3 rounded-[10px] border border-[rgba(242,239,238,0.35)] px-3 text-[15px] font-semibold text-white no-underline hover:bg-[rgba(242,239,238,0.08)] hover:text-white"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" />
+          </svg>
+          Administração
+        </Link>
+      )}
       <div className="mt-auto flex flex-col gap-1 border-t border-[rgba(242,239,238,0.2)] px-2 pt-4">
         <span className="text-sm font-semibold">{username ? `@${username}` : "Instagram"}</span>
         <span className="flex items-center gap-1.5 text-[13px] text-[#E0D2D4]">

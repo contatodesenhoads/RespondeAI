@@ -7,11 +7,11 @@ import { supabaseNavegador } from "@/lib/supabase/client";
 const campo =
   "h-12 w-full rounded-[10px] border border-campo bg-white px-3.5 text-[15px] text-tinta";
 
-export function FormLogin() {
+export function FormLogin({ avisoInicial = null }: { avisoInicial?: string | null }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [erro, setErro] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(avisoInicial);
   const [aviso, setAviso] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
 
@@ -25,7 +25,7 @@ export function FormLogin() {
       setErro("E-mail ou senha incorretos.");
       return;
     }
-    router.replace("/inicio");
+    router.replace("/");
     router.refresh();
   }
 
@@ -36,7 +36,7 @@ export function FormLogin() {
       return;
     }
     await supabaseNavegador().auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/configuracoes`,
+      redirectTo: `${window.location.origin}/definir-senha`,
     });
     setAviso("Se o e-mail estiver cadastrado, você vai receber um link para criar uma nova senha.");
   }

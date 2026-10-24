@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
-import { sessaoAtual } from "@/lib/conta";
+import { contaBloqueada, sessaoAtual } from "@/lib/conta";
 
 export const metadata = { title: "Conecte seu Instagram · Responde AI" };
 
@@ -41,6 +41,7 @@ export default async function ConectarInstagram({
   searchParams: Promise<{ erro?: string; reconectar?: string }>;
 }) {
   const sessao = await sessaoAtual();
+  if (contaBloqueada(sessao)) redirect("/conta-pausada");
   const { erro, reconectar } = await searchParams;
   if (sessao.instagram?.status === "conectada" && !reconectar) redirect("/inicio");
 

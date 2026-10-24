@@ -64,10 +64,14 @@ export function casaPalavra(texto: string, palavra: string) {
 export async function contaPorIgUserId(igUserId: string): Promise<Conta | null> {
   const { data } = await supabaseAdmin()
     .from("contas_instagram")
-    .select("cliente_id, ig_user_id, token_criptografado, status")
+    .select("cliente_id, ig_user_id, token_criptografado, status, clientes(status)")
     .eq("ig_user_id", igUserId)
     .maybeSingle();
   if (!data?.token_criptografado || data.status !== "conectada") return null;
+
+  // Bloqueio automático: cliente pausado ou cancelado não tem automações rodando.
+  const cliente = Array.isArray(data.clientes) ? data.clientes[0] : data.clientes;
+  if (cliente && (cliente as { status?: string }).status !== "ativo") return null;
   return {
     cliente_id: data.cliente_id,
     ig_user_id: data.ig_user_id,

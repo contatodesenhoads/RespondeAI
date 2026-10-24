@@ -1,0 +1,69 @@
+<!-- Supabase › Authentication › Emails › Templates › "Invite user"
+     Assunto sugerido: Seu acesso ao Responde AI chegou -->
+<!doctype html>
+<html lang="pt-BR">
+<body style="margin:0;padding:0;background:#F2EFEE;font-family:Inter,Arial,Helvetica,sans-serif;color:#2A1B1E;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F2EFEE;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#FFFFFF;border:1px solid #E2DADB;border-radius:16px;overflow:hidden;">
+          <tr>
+            <td style="background:#67202C;padding:28px 32px;">
+              <table role="presentation" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="vertical-align:middle;">
+                    <img src="{{ .SiteURL }}/logo-desenho-ads.png" width="44" height="44" alt="Desenho Ads" style="display:block;border-radius:8px;">
+                  </td>
+                  <td style="vertical-align:middle;padding-left:12px;font-size:20px;font-weight:700;color:#F2EFEE;">
+                    Responde AI
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:36px 32px 12px;">
+              <h1 style="margin:0 0 12px;font-size:24px;line-height:1.3;color:#2A1B1E;">Bem-vindo ao Responde AI!</h1>
+              <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#4A3E41;">
+                Seu acesso está pronto. A partir de agora, cada comentário no seu Instagram pode virar um seguidor e uma oportunidade de venda, no automático.
+              </p>
+              <p style="margin:0 0 28px;font-size:16px;line-height:1.6;color:#4A3E41;">
+                Clique no botão abaixo para criar sua senha e entrar:
+              </p>
+              <table role="presentation" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:#67202C;border-radius:10px;">
+                    <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/definir-senha"
+                       style="display:inline-block;padding:15px 28px;font-size:16px;font-weight:600;color:#F2EFEE;text-decoration:none;">
+                      Criar minha senha
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:24px 0 0;font-size:14px;line-height:1.6;color:#6B5E61;">
+                Seu e-mail de acesso é <b style="color:#2A1B1E;">{{ .Email }}</b>. O link vale por tempo limitado; se expirar, é só pedir um novo para a Desenho Ads.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 32px 32px;">
+              <div style="border-top:1px solid #EEE8E9;padding-top:20px;font-size:14px;line-height:1.6;color:#4A3E41;">
+                <b style="color:#2A1B1E;">Próximos passos:</b><br>
+                1. Crie sua senha.<br>
+                2. Conecte seu Instagram (conta profissional).<br>
+                3. Crie sua primeira automação.
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#F8F5F5;padding:18px 32px;font-size:12px;line-height:1.6;color:#6B5E61;">
+              Um produto Desenho Ads · Agência de tráfego pago · Itajaí/SC<br>
+              Dúvidas? Responda este e-mail ou escreva para contatodesenhoads@gmail.com
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

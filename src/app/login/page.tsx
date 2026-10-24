@@ -3,7 +3,9 @@ import { FormLogin } from "./FormLogin";
 
 export const metadata = { title: "Entrar · Responde AI" };
 
-export default function PaginaLogin() {
+export default async function PaginaLogin({ searchParams }: { searchParams: Promise<{ erro?: string }> }) {
+  const { erro } = await searchParams;
+  const aviso = erro === "link" ? "Este link de acesso expirou ou já foi usado. Peça um novo para a Desenho Ads." : null;
   return (
     <div className="flex min-h-screen flex-wrap">
       <div className="flex min-h-[360px] flex-[1_1_420px] flex-col justify-between gap-10 bg-marsala p-8 text-off sm:p-14">
@@ -23,7 +25,7 @@ export default function PaginaLogin() {
         <p className="text-[13px] text-[#E0D2D4]">Um produto Desenho Ads · Agência de tráfego pago</p>
       </div>
       <div className="flex flex-[1_1_420px] items-center justify-center px-6 py-12">
-        <FormLogin />
+        <FormLogin avisoInicial={aviso} />
       </div>
     </div>
   );

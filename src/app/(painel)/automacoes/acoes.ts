@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { sessaoAtual } from "@/lib/conta";
+import { contaBloqueada, sessaoAtual } from "@/lib/conta";
 import { supabaseServidor } from "@/lib/supabase/server";
 
 function texto(form: FormData, campo: string, max = 1000) {
@@ -23,6 +23,7 @@ export type EstadoForm = { erro?: string };
 
 export async function salvarAutomacao(_: EstadoForm, form: FormData): Promise<EstadoForm> {
   const sessao = await sessaoAtual();
+  if (contaBloqueada(sessao)) return { erro: "Sua assinatura está pendente. Regularize para editar automações." };
   const id = texto(form, "id", 64);
   const gatilhoBruto = texto(form, "gatilho");
   const gatilho = ["comentario", "direct", "story", "live"].includes(gatilhoBruto) ? gatilhoBruto : "comentario";
@@ -76,7 +77,8 @@ export async function salvarAutomacao(_: EstadoForm, form: FormData): Promise<Es
 }
 
 export async function alterarStatus(form: FormData) {
-  await sessaoAtual();
+  const sessao = await sessaoAtual();
+  if (contaBloqueada(sessao)) return;
   const id = String(form.get("id") ?? "");
   const status = String(form.get("status") ?? "") === "ativa" ? "ativa" : "pausada";
   const supabase = await supabaseServidor();

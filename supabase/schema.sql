@@ -12,9 +12,12 @@ create extension if not exists "pgcrypto";
 create table if not exists public.clientes (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
-  plano text not null default 'agencia',
+  plano text not null default 'essencial' check (plano in ('essencial', 'completo', 'cortesia')),
   status text not null default 'ativo' check (status in ('ativo', 'pausado', 'cancelado')),
-  criado_em timestamptz not null default now()
+  status_motivo text,
+  observacoes text,
+  criado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
 );
 
 -- ---------------------------------------------------------------------
@@ -24,6 +27,7 @@ create table if not exists public.perfis (
   id uuid primary key references auth.users (id) on delete cascade,
   cliente_id uuid not null references public.clientes (id) on delete cascade,
   nome text,
+  email text,
   papel text not null default 'cliente' check (papel in ('admin', 'cliente')),
   criado_em timestamptz not null default now()
 );
@@ -143,6 +147,28 @@ as $$
   group by e.automacao_id, e.tipo
 $$;
 
+-- Resumo de atividade por cliente (uso exclusivo do servidor, na área administrativa)
+create or replace function public.admin_resumo_clientes(desde timestamptz)
+returns table (cliente_id uuid, comentarios bigint, entregas bigint, seguidores bigint, ultima_atividade timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    e.cliente_id,
+    count(*) filter (where e.tipo = 'comentou'),
+    count(*) filter (where e.tipo = 'entregou'),
+    count(*) filter (where e.tipo = 'seguiu'),
+    max(e.criado_em)
+  from public.eventos e
+  where e.criado_em >= desde
+  group by e.cliente_id
+$$;
+
+revoke execute on function public.admin_resumo_clientes(timestamptz) from public, anon, authenticated;
+grant execute on function public.admin_resumo_clientes(timestamptz) to service_role;
+
 -- ---------------------------------------------------------------------
 -- Novo usuário criado no login → cria o cliente e o perfil automaticamente
 -- ---------------------------------------------------------------------
@@ -154,13 +180,18 @@ set search_path = public
 as $$
 declare
   novo_cliente uuid;
+  plano_escolhido text := coalesce(new.raw_user_meta_data ->> 'plano', 'essencial');
 begin
-  insert into public.clientes (nome)
-  values (coalesce(new.raw_user_meta_data ->> 'empresa', new.email))
+  if plano_escolhido not in ('essencial', 'completo', 'cortesia') then
+    plano_escolhido := 'essencial';
+  end if;
+
+  insert into public.clientes (nome, plano)
+  values (coalesce(new.raw_user_meta_data ->> 'empresa', new.email), plano_escolhido)
   returning id into novo_cliente;
 
-  insert into public.perfis (id, cliente_id, nome)
-  values (new.id, novo_cliente, new.raw_user_meta_data ->> 'nome');
+  insert into public.perfis (id, cliente_id, nome, email)
+  values (new.id, novo_cliente, new.raw_user_meta_data ->> 'nome', new.email);
 
   return new;
 end;
