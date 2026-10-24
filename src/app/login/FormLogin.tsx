@@ -31,6 +31,10 @@ export function FormLogin({ avisoInicial = null }: { avisoInicial?: string | nul
 
   async function esqueci() {
     setErro(null);
+    if (process.env.NEXT_PUBLIC_EMAIL_ATIVO !== "1") {
+      setAviso("Peça um novo link de acesso para a Desenho Ads pelo WhatsApp ou pelo e-mail contatodesenhoads@gmail.com.");
+      return;
+    }
     if (!email) {
       setErro("Digite seu e-mail acima para receber o link de nova senha.");
       return;

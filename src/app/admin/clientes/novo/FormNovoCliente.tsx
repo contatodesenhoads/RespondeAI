@@ -9,6 +9,8 @@ import type { Plano } from "@/lib/planos";
 const campo = "h-[46px] w-full rounded-[10px] border border-campo bg-white px-3.5 text-[15px] text-tinta";
 const rotulo = "text-sm font-semibold";
 
+const EMAIL_ATIVO = process.env.NEXT_PUBLIC_EMAIL_ATIVO === "1";
+
 export function FormNovoCliente({ planos }: { planos: Plano[] }) {
   const [estado, acao, enviando] = useActionState<EstadoNovoCliente, FormData>(criarCliente, {});
   const [plano, setPlano] = useState("essencial");
@@ -99,10 +101,11 @@ export function FormNovoCliente({ planos }: { planos: Plano[] }) {
           <button
             type="button"
             aria-pressed={entrega === "email"}
+            disabled={!EMAIL_ATIVO}
             onClick={() => setEntrega("email")}
-            className={`h-11 rounded-full border px-[18px] text-sm ${entrega === "email" ? "border-marsala bg-marsala font-semibold text-off" : "border-campo bg-white font-medium"}`}
+            className={`h-11 rounded-full border px-[18px] text-sm disabled:cursor-not-allowed disabled:opacity-50 ${entrega === "email" ? "border-marsala bg-marsala font-semibold text-off" : "border-campo bg-white font-medium"}`}
           >
-            Enviar convite por e-mail
+            Enviar convite por e-mail{!EMAIL_ATIVO && " (em breve)"}
           </button>
         </div>
         <p className="text-[13px] text-suave">

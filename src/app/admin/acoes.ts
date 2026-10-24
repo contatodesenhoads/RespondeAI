@@ -37,7 +37,7 @@ export async function criarCliente(_: EstadoNovoCliente, form: FormData): Promis
   const nome = campo(form, "nome", 120);
   const email = campo(form, "email", 200).toLowerCase();
   const plano = PLANOS.includes(campo(form, "plano")) ? campo(form, "plano") : "essencial";
-  const entrega = campo(form, "entrega") === "email" ? "email" : "link";
+  const entrega = campo(form, "entrega") === "email" && process.env.NEXT_PUBLIC_EMAIL_ATIVO === "1" ? "email" : "link";
   const observacoes = campo(form, "observacoes", 2000);
 
   if (!empresa) return { erro: "Informe o nome da empresa." };
@@ -141,7 +141,7 @@ export async function acessoDoUsuario(_: EstadoAcesso, form: FormData): Promise<
   if (!email) return { erro: "Usuário sem e-mail." };
 
   try {
-    if (modo === "email") {
+    if (modo === "email" && process.env.NEXT_PUBLIC_EMAIL_ATIVO === "1") {
       const { error } = await supabaseAdmin().auth.resetPasswordForEmail(email, {
         redirectTo: `${env.siteUrl()}/definir-senha`,
       });
