@@ -86,6 +86,6 @@ export async function linkDeAcesso(
       ? await admin.auth.admin.generateLink({ type: "invite", email, options: { data: dados, redirectTo } })
       : await admin.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo } });
   if (error || !data?.properties?.hashed_token) throw error ?? new Error("Link não gerado");
-  const link = `${env.siteUrl()}/auth/confirm?token_hash=${data.properties.hashed_token}&type=${tipo}&next=/definir-senha`;
+  const link = `${env.siteUrl()}/auth/confirm?token_hash=${data.properties.hashed_token}&type=${tipo}`;
   return { link, usuarioId: data.user?.id ?? null };
 }

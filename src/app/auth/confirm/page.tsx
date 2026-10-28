@@ -1,5 +1,6 @@
 import { Logo } from "@/components/Logo";
 import { confirmarAcesso } from "./acoes";
+import { limparLinkDeAcesso } from "./limpeza";
 
 export const metadata = { title: "Acessar · Responde AI", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -11,7 +12,9 @@ export default async function ConfirmarAcesso({
 }: {
   searchParams: Promise<{ token_hash?: string; type?: string; next?: string }>;
 }) {
-  const { token_hash = "", type = "", next = "/definir-senha" } = await searchParams;
+  const bruto = await searchParams;
+  const { tokenHash: token_hash, tipo, destino: next } = limparLinkDeAcesso(bruto);
+  const type = tipo ?? "";
   const recuperacao = type === "recovery";
 
   return (

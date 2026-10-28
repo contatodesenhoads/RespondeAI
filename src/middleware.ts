@@ -5,6 +5,14 @@ import { NextResponse, type NextRequest } from "next/server";
 const PUBLICAS = ["/login", "/auth/", "/privacidade", "/termos", "/exclusao-de-dados", "/api", "/l/"];
 
 export async function middleware(request: NextRequest) {
+  // Endereço colado com pontuação no fim (ex.: "/definir-senha."): corrige e redireciona.
+  const semPontuacao = request.nextUrl.pathname.replace(/[.,;:!?)\]'"]+$/, "");
+  if (semPontuacao !== request.nextUrl.pathname && semPontuacao.length > 0) {
+    const url = request.nextUrl.clone();
+    url.pathname = semPontuacao;
+    return NextResponse.redirect(url);
+  }
+
   let resposta = NextResponse.next({ request });
 
   const supabase = createServerClient(
