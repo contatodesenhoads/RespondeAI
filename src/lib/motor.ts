@@ -12,10 +12,11 @@ import {
 } from "@/lib/instagram";
 import {
   escolherResposta,
-  normalizarWhatsapp,
-  validarEmail,
+  extrairContatos,
+  proximoCampoCaptura,
   casaPalavra,
   MENSAGEM_CAPTURA_PADRAO,
+  type TipoCaptura,
 } from "@/lib/regras";
 
 export { casaPalavra, normalizar } from "@/lib/regras";
@@ -44,8 +45,9 @@ type Automacao = {
   mensagem_seguir: string | null;
   botao_seguir: string;
   captura_ativa: boolean;
-  captura_tipo: "email" | "whatsapp";
+  captura_tipo: TipoCaptura;
   captura_mensagem: string | null;
+  captura_mensagem_whatsapp: string | null;
   conteudo_tipo: "link" | "texto" | "arquivo" | "midia";
   mensagem_entrega: string;
   conteudo_url: string | null;
@@ -369,8 +371,30 @@ async function pedirParaSeguir(conta: Conta, auto: Automacao, igsid: string) {
 }
 
 // ---------------------------------------------------------------------
-// 3. Captura de e-mail ou WhatsApp (plano Completo)
+// 3. Captura de e-mail e WhatsApp (plano Completo)
 // ---------------------------------------------------------------------
+
+function mensagemDeCaptura(auto: Automacao, campo: "email" | "whatsapp") {
+  if (campo === "email") return auto.captura_mensagem || MENSAGEM_CAPTURA_PADRAO.email;
+  // Automações antigas que pediam só WhatsApp guardavam a mensagem em captura_mensagem.
+  return (
+    auto.captura_mensagem_whatsapp ||
+    (auto.captura_tipo === "whatsapp" ? auto.captura_mensagem : null) ||
+    MENSAGEM_CAPTURA_PADRAO.whatsapp
+  );
+}
+
+async function pedirDado(conta: Conta, auto: Automacao, igsid: string, campo: "email" | "whatsapp", contatoId?: string) {
+  await salvarContato(conta.cliente_id, igsid, {
+    aguardando_automacao_id: auto.id,
+    aguardando_desde: new Date().toISOString(),
+  });
+  try {
+    await enviarMensagem(conta.token, igsid, { text: mensagemDeCaptura(auto, campo).slice(0, 1000) });
+  } catch (e) {
+    await registrar(conta.cliente_id, "erro", auto.id, contatoId, { etapa: `captura_${campo}`, erro: textoErro(e) });
+  }
+}
 
 async function seguirParaEntrega(conta: Conta, auto: Automacao, igsid: string, contatoId: string | undefined) {
   if (!auto.captura_ativa || !temRecurso(conta.plano, "captura_lead")) {
@@ -378,29 +402,19 @@ async function seguirParaEntrega(conta: Conta, auto: Automacao, igsid: string, c
     return;
   }
 
-  // Quem já deixou o dado antes não precisa informar de novo.
+  // Quem já deixou os dados antes não precisa informar de novo.
   const { data: contato } = await supabaseAdmin()
     .from("contatos")
     .select("email, whatsapp")
     .eq("cliente_id", conta.cliente_id)
     .eq("igsid", igsid)
     .maybeSingle();
-  if ((auto.captura_tipo === "email" && contato?.email) || (auto.captura_tipo === "whatsapp" && contato?.whatsapp)) {
+  const falta = proximoCampoCaptura(auto.captura_tipo || "ambos", Boolean(contato?.email), Boolean(contato?.whatsapp));
+  if (!falta) {
     await entregar(conta, auto, igsid, contatoId);
     return;
   }
-
-  await salvarContato(conta.cliente_id, igsid, {
-    aguardando_automacao_id: auto.id,
-    aguardando_desde: new Date().toISOString(),
-  });
-  try {
-    await enviarMensagem(conta.token, igsid, {
-      text: (auto.captura_mensagem || MENSAGEM_CAPTURA_PADRAO[auto.captura_tipo]).slice(0, 1000),
-    });
-  } catch (e) {
-    await registrar(conta.cliente_id, "erro", auto.id, contatoId, { etapa: "captura_pedido", erro: textoErro(e) });
-  }
+  await pedirDado(conta, auto, igsid, falta, contatoId);
 }
 
 // Retorna true se a mensagem era a resposta ao pedido de e-mail/WhatsApp.
@@ -408,28 +422,44 @@ async function tratarRespostaDeCaptura(conta: Conta, igsid: string, texto: strin
   const admin = supabaseAdmin();
   const { data: contato } = await admin
     .from("contatos")
-    .select("id, aguardando_automacao_id, aguardando_desde")
+    .select("id, email, whatsapp, aguardando_automacao_id, aguardando_desde")
     .eq("cliente_id", conta.cliente_id)
     .eq("igsid", igsid)
     .maybeSingle();
   if (!contato?.aguardando_automacao_id || !contato.aguardando_desde) return false;
 
+  const limpar = () =>
+    admin.from("contatos").update({ aguardando_automacao_id: null, aguardando_desde: null }).eq("id", contato.id);
+
   // Fora da janela de 24 h, esquece o pedido.
   if (Date.now() - new Date(contato.aguardando_desde).getTime() > 24 * HORA) {
-    await admin.from("contatos").update({ aguardando_automacao_id: null, aguardando_desde: null }).eq("id", contato.id);
+    await limpar();
     return false;
   }
 
   const auto = await automacaoPorId(conta.cliente_id, contato.aguardando_automacao_id);
   if (!auto) {
-    await admin.from("contatos").update({ aguardando_automacao_id: null, aguardando_desde: null }).eq("id", contato.id);
+    await limpar();
     return false;
   }
 
-  const valor = auto.captura_tipo === "email" ? validarEmail(texto) : normalizarWhatsapp(texto);
-  if (!valor) {
+  const tipo = auto.captura_tipo || "ambos";
+  const esperado = proximoCampoCaptura(tipo, Boolean(contato.email), Boolean(contato.whatsapp));
+  if (!esperado) {
+    await limpar();
+    await entregar(conta, auto, igsid, contato.id);
+    return true;
+  }
+
+  // A pessoa pode mandar um dado ou os dois juntos.
+  const achados = extrairContatos(texto);
+  const novo: Record<string, string> = {};
+  if (!contato.email && achados.email && tipo !== "whatsapp") novo.email = achados.email;
+  if (!contato.whatsapp && achados.whatsapp && tipo !== "email") novo.whatsapp = achados.whatsapp;
+
+  if (!novo[esperado]) {
     const pedido =
-      auto.captura_tipo === "email"
+      esperado === "email"
         ? "Hmm, não parece um e-mail válido. Pode mandar de novo? Ex.: nome@email.com"
         : "Hmm, não parece um número válido. Pode mandar de novo com DDD? Ex.: 47 99999-9999";
     try {
@@ -442,14 +472,17 @@ async function tratarRespostaDeCaptura(conta: Conta, igsid: string, texto: strin
 
   await admin
     .from("contatos")
-    .update({
-      [auto.captura_tipo]: valor,
-      aguardando_automacao_id: null,
-      aguardando_desde: null,
-      ultima_interacao: new Date().toISOString(),
-    })
+    .update({ ...novo, ultima_interacao: new Date().toISOString() })
     .eq("id", contato.id);
-  await registrar(conta.cliente_id, "capturou_lead", auto.id, contato.id, { tipo: auto.captura_tipo });
+
+  const proximo = proximoCampoCaptura(tipo, Boolean(contato.email || novo.email), Boolean(contato.whatsapp || novo.whatsapp));
+  if (proximo) {
+    await pedirDado(conta, auto, igsid, proximo, contato.id);
+    return true;
+  }
+
+  await limpar();
+  await registrar(conta.cliente_id, "capturou_lead", auto.id, contato.id, { tipo });
   await entregar(conta, auto, igsid, contato.id);
   return true;
 }

@@ -33,7 +33,31 @@ export function tipoDaMidia(mime: string, nome = ""): TipoMidia | null {
   const ext = nome.toLowerCase().split(".").pop();
   if (ext === "m4a" || ext === "aac" || ext === "wav") return "audio";
   if (ext === "pdf") return "file";
+  if (ext === "mp3") return "audio";
+  if (ext === "mp4" || ext === "mov" || ext === "webm") return "video";
+  if (ext === "jpg" || ext === "jpeg" || ext === "png") return "image";
   return null;
+}
+
+// Tipo informado ao armazenamento. Alguns navegadores não informam o tipo de
+// .m4a/.pdf; nesse caso, deduz pela extensão.
+export function mimeDoArquivo(arquivo: { type: string; name: string }) {
+  if (arquivo.type && MIME_PARA_TIPO[arquivo.type]) return arquivo.type;
+  const ext = arquivo.name.toLowerCase().split(".").pop();
+  const porExtensao: Record<string, string> = {
+    pdf: "application/pdf",
+    m4a: "audio/mp4",
+    aac: "audio/aac",
+    wav: "audio/wav",
+    mp3: "audio/mpeg",
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    webm: "video/webm",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+  };
+  return porExtensao[ext ?? ""] ?? arquivo.type ?? "application/octet-stream";
 }
 
 export function limiteDoTipo(tipo: TipoMidia) {

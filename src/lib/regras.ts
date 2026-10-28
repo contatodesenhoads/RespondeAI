@@ -41,5 +41,22 @@ export function normalizarWhatsapp(texto: string): string | null {
 
 export const MENSAGEM_CAPTURA_PADRAO = {
   email: "Antes de te enviar, qual é o seu melhor e-mail? É só responder aqui.",
-  whatsapp: "Antes de te enviar, qual é o seu WhatsApp com DDD? É só responder aqui.",
+  whatsapp: "Perfeito! E qual é o seu WhatsApp com DDD?",
 } as const;
+
+export type TipoCaptura = "email" | "whatsapp" | "ambos";
+
+// Qual dado ainda falta pedir (primeiro o e-mail, depois o WhatsApp).
+export function proximoCampoCaptura(tipo: TipoCaptura, temEmail: boolean, temWhatsapp: boolean): "email" | "whatsapp" | null {
+  if ((tipo === "email" || tipo === "ambos") && !temEmail) return "email";
+  if ((tipo === "whatsapp" || tipo === "ambos") && !temWhatsapp) return "whatsapp";
+  return null;
+}
+
+// Tira e-mail e WhatsApp de uma mesma mensagem (a pessoa pode mandar os dois juntos).
+export function extrairContatos(texto: string): { email: string | null; whatsapp: string | null } {
+  const email = validarEmail(texto);
+  const resto = email ? texto.replace(new RegExp(email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), " ") : texto;
+  const semEmail = resto.replace(/[^\s@]+@[^\s@]+/g, " ");
+  return { email, whatsapp: normalizarWhatsapp(semEmail) };
+}

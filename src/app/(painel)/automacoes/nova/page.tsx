@@ -27,7 +27,6 @@ export default async function NovaAutomacao() {
         erroPosts={erro}
         username={sessao.instagram?.username ?? null}
         recursos={planoDe(sessao.plano).recursos}
-        clienteId={sessao.clienteId}
         inicial={{
           nome: "",
           gatilho: "comentario",
@@ -41,8 +40,8 @@ export default async function NovaAutomacao() {
           mensagem_seguir: `Quase lá! Para receber, siga ${perfil} e depois clique em “Já segui”.`,
           botao_seguir: "Já segui",
           captura_ativa: false,
-          captura_tipo: "email",
           captura_mensagem: MENSAGEM_CAPTURA_PADRAO.email,
+          captura_mensagem_whatsapp: MENSAGEM_CAPTURA_PADRAO.whatsapp,
           conteudo_tipo: "link",
           mensagem_entrega: "Aqui está o seu conteúdo! Qualquer dúvida, é só responder esta mensagem.",
           conteudo_url: "",

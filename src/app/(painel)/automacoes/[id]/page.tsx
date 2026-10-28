@@ -39,7 +39,6 @@ export default async function EditarAutomacao({ params }: { params: Promise<{ id
         erroPosts={erro}
         username={sessao.instagram?.username ?? null}
         recursos={planoDe(sessao.plano).recursos}
-        clienteId={sessao.clienteId}
         inicial={{
           id: a.id,
           nome: a.nome,
@@ -54,8 +53,9 @@ export default async function EditarAutomacao({ params }: { params: Promise<{ id
           mensagem_seguir: a.mensagem_seguir ?? "",
           botao_seguir: a.botao_seguir,
           captura_ativa: Boolean(a.captura_ativa),
-          captura_tipo: a.captura_tipo === "whatsapp" ? "whatsapp" : "email",
-          captura_mensagem: a.captura_mensagem ?? MENSAGEM_CAPTURA_PADRAO[a.captura_tipo === "whatsapp" ? "whatsapp" : "email"],
+          captura_mensagem: a.captura_tipo === "whatsapp" ? MENSAGEM_CAPTURA_PADRAO.email : (a.captura_mensagem ?? MENSAGEM_CAPTURA_PADRAO.email),
+          captura_mensagem_whatsapp:
+            a.captura_mensagem_whatsapp ?? (a.captura_tipo === "whatsapp" && a.captura_mensagem ? a.captura_mensagem : MENSAGEM_CAPTURA_PADRAO.whatsapp),
           conteudo_tipo: a.conteudo_tipo === "midia" ? "midia" : a.conteudo_tipo === "texto" ? "texto" : "link",
           mensagem_entrega: a.mensagem_entrega,
           conteudo_url: a.conteudo_url ?? "",

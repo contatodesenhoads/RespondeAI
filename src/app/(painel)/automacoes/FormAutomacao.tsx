@@ -3,6 +3,7 @@
 import { useActionState, useRef, useState } from "react";
 import Link from "next/link";
 import { salvarAutomacao, type EstadoForm } from "./acoes";
+import { descartarUpload, prepararUpload } from "./upload";
 import { supabaseNavegador } from "@/lib/supabase/client";
 import type { Recurso } from "@/lib/planos";
 import { MENSAGEM_CAPTURA_PADRAO } from "@/lib/regras";
@@ -13,7 +14,7 @@ import {
   LIMITE_IMAGEM,
   NOME_TIPO,
   limiteDoTipo,
-  nomeSeguro,
+  mimeDoArquivo,
   tamanhoLegivel,
   tipoDaMidia,
   type TipoMidia,
@@ -70,8 +71,8 @@ export type ValoresAutomacao = {
   mensagem_seguir: string;
   botao_seguir: string;
   captura_ativa: boolean;
-  captura_tipo: "email" | "whatsapp";
   captura_mensagem: string;
+  captura_mensagem_whatsapp: string;
   conteudo_tipo: "link" | "texto" | "midia";
   mensagem_entrega: string;
   conteudo_url: string;
@@ -195,14 +196,12 @@ export function FormAutomacao({
   erroPosts,
   username,
   recursos,
-  clienteId,
 }: {
   inicial: ValoresAutomacao;
   posts: PostResumo[];
   erroPosts: boolean;
   username: string | null;
   recursos: Recurso[];
-  clienteId: string;
 }) {
   const [estado, acao, enviando] = useActionState<EstadoForm, FormData>(salvarAutomacao, {});
   const [v, setV] = useState(inicial);
@@ -240,30 +239,47 @@ export function FormAutomacao({
     }
 
     setEnviandoArquivo(true);
-    const supabase = supabaseNavegador();
-    const caminho = `${clienteId}/${crypto.randomUUID()}-${nomeSeguro(arquivo.name)}`;
-    const { error } = await supabase.storage
-      .from(BUCKET_MIDIAS)
-      .upload(caminho, arquivo, { contentType: arquivo.type || undefined, upsert: false });
-    setEnviandoArquivo(false);
-    if (error) {
-      setErroArquivo("Não foi possível enviar o arquivo. Tente de novo.");
-      return;
-    }
+    try {
+      // 1. O servidor confere plano, tipo, tamanho e espaço e autoriza o envio.
+      const mime = mimeDoArquivo(arquivo);
+      const preparo = await prepararUpload(arquivo.name, mime, arquivo.size, v.id);
+      if (!preparo.ok) {
+        setErroArquivo(preparo.erro);
+        return;
+      }
 
-    // Arquivo enviado nesta edição e trocado de novo: apaga o anterior (o salvo é apagado ao salvar).
-    if (v.midia_path && v.midia_path !== caminhoSalvo.current) {
-      await supabase.storage.from(BUCKET_MIDIAS).remove([v.midia_path]);
+      // 2. O navegador envia o arquivo direto para o armazenamento.
+      const { error } = await supabaseNavegador()
+        .storage.from(BUCKET_MIDIAS)
+        .uploadToSignedUrl(preparo.caminho, preparo.token, arquivo, { contentType: mime });
+      if (error) {
+        const motivo = error.message || "";
+        setErroArquivo(
+          /mime|type/i.test(motivo)
+            ? "Formato de arquivo não aceito pelo armazenamento. Use JPG, PNG, MP4, MP3, M4A, WAV ou PDF."
+            : /size|large|exceed/i.test(motivo)
+              ? "Arquivo maior que o permitido pelo armazenamento."
+              : `Não foi possível enviar o arquivo (${motivo || "erro de conexão"}). Tente de novo.`,
+        );
+        return;
+      }
+
+      // Arquivo enviado nesta edição e trocado de novo: apaga o anterior (o salvo é apagado ao salvar).
+      if (v.midia_path && v.midia_path !== caminhoSalvo.current) await descartarUpload(v.midia_path);
+
+      setV((x) => ({
+        ...x,
+        midia_path: preparo.caminho,
+        midia_tipo: tipo,
+        midia_nome: arquivo.name,
+        midia_tamanho: arquivo.size,
+        midia_url: preparo.url,
+      }));
+    } catch {
+      setErroArquivo("Não foi possível enviar o arquivo (erro de conexão). Tente de novo.");
+    } finally {
+      setEnviandoArquivo(false);
     }
-    const { data } = supabase.storage.from(BUCKET_MIDIAS).getPublicUrl(caminho);
-    setV((x) => ({
-      ...x,
-      midia_path: caminho,
-      midia_tipo: tipo,
-      midia_nome: arquivo.name,
-      midia_tamanho: arquivo.size,
-      midia_url: data.publicUrl,
-    }));
   }
 
   return (
@@ -274,7 +290,6 @@ export function FormAutomacao({
       <input type="hidden" name="post_legenda" value={postEscolhido?.legenda ?? ""} />
       <input type="hidden" name="post_miniatura" value={postEscolhido?.miniatura ?? ""} />
       <input type="hidden" name="conteudo_tipo" value={v.conteudo_tipo} />
-      <input type="hidden" name="captura_tipo" value={v.captura_tipo} />
       <input type="hidden" name="midia_path" value={v.midia_path} />
       <input type="hidden" name="midia_tipo" value={v.midia_tipo} />
       <input type="hidden" name="midia_nome" value={v.midia_nome} />
@@ -388,29 +403,30 @@ export function FormAutomacao({
         <Secao
           titulo={
             <TituloComInterruptor
-              titulo={`${n("captura")}. Pedir e-mail ou WhatsApp`}
-              descricao="Antes de entregar, a pessoa informa o contato. Ele fica salvo em Contatos."
+              titulo={`${n("captura")}. Pedir e-mail e WhatsApp`}
+              descricao="Antes de entregar, a pessoa informa os dois. Eles ficam salvos em Contatos."
               ligado={v.captura_ativa}
               onClick={() => muda("captura_ativa", !v.captura_ativa)}
               bloqueado={!podeCaptura}
             />
           }
         >
-          {!podeCaptura && <AvisoBloqueio texto="Transforme cada comentário em um lead com e-mail ou WhatsApp." />}
+          {!podeCaptura && <AvisoBloqueio texto="Transforme cada comentário em um lead com e-mail e WhatsApp." />}
           {podeCaptura && v.captura_ativa && (
-            <div className="flex flex-col gap-3.5 border-t border-linha-2 pt-3.5">
-              <span className={rotulo}>O que pedir</span>
-              <div className="flex flex-wrap gap-2">
-                <Pilula ativo={v.captura_tipo === "email"} onClick={() => setV((x) => ({ ...x, captura_tipo: "email", captura_mensagem: x.captura_mensagem === MENSAGEM_CAPTURA_PADRAO.whatsapp ? MENSAGEM_CAPTURA_PADRAO.email : x.captura_mensagem }))}>
-                  E-mail
-                </Pilula>
-                <Pilula ativo={v.captura_tipo === "whatsapp"} onClick={() => setV((x) => ({ ...x, captura_tipo: "whatsapp", captura_mensagem: x.captura_mensagem === MENSAGEM_CAPTURA_PADRAO.email ? MENSAGEM_CAPTURA_PADRAO.whatsapp : x.captura_mensagem }))}>
-                  WhatsApp
-                </Pilula>
+            <div className="flex flex-col gap-4 border-t border-linha-2 pt-3.5">
+              <div className="flex flex-col gap-2 rounded-xl bg-off-2 p-4">
+                <span className="text-[15px] font-bold">E-mail</span>
+                <label htmlFor="captura_mensagem" className={rotulo}>Mensagem pedindo o e-mail</label>
+                <textarea id="captura_mensagem" name="captura_mensagem" rows={2} maxLength={640} value={v.captura_mensagem} onChange={(e) => muda("captura_mensagem", e.target.value)} className={`${campo} py-3`} />
               </div>
-              <label htmlFor="captura_mensagem" className={rotulo}>Mensagem do pedido</label>
-              <textarea id="captura_mensagem" name="captura_mensagem" rows={2} maxLength={640} value={v.captura_mensagem} onChange={(e) => muda("captura_mensagem", e.target.value)} className={`${campo} py-3`} />
-              <p className={ajuda}>O sistema confere se o {v.captura_tipo === "email" ? "e-mail" : "número"} é válido e pede de novo se não for. Quem já informou antes recebe direto.</p>
+              <div className="flex flex-col gap-2 rounded-xl bg-off-2 p-4">
+                <span className="text-[15px] font-bold">WhatsApp</span>
+                <label htmlFor="captura_mensagem_whatsapp" className={rotulo}>Mensagem pedindo o WhatsApp</label>
+                <textarea id="captura_mensagem_whatsapp" name="captura_mensagem_whatsapp" rows={2} maxLength={640} value={v.captura_mensagem_whatsapp} onChange={(e) => muda("captura_mensagem_whatsapp", e.target.value)} className={`${campo} py-3`} />
+              </div>
+              <p className={ajuda}>
+                Os dois são obrigatórios: o conteúdo só é entregue depois que a pessoa mandar um e-mail e um WhatsApp válidos. Se mandar algo errado, o sistema pede de novo. Quem já informou antes recebe direto.
+              </p>
             </div>
           )}
         </Secao>
@@ -532,10 +548,10 @@ export function FormAutomacao({
         {podeCaptura && v.captura_ativa && (
           <>
             <Rotulo>pedido de contato</Rotulo>
-            <Balao>{v.captura_mensagem || MENSAGEM_CAPTURA_PADRAO[v.captura_tipo]}</Balao>
-            <div className="max-w-[70%] self-end rounded-2xl rounded-br bg-[#EDE7F6] px-3.5 py-2.5 text-sm text-tinta-2">
-              {v.captura_tipo === "email" ? "nome@email.com" : "47 99999-9999"}
-            </div>
+            <Balao>{v.captura_mensagem || MENSAGEM_CAPTURA_PADRAO.email}</Balao>
+            <RespostaPessoa>nome@email.com</RespostaPessoa>
+            <Balao>{v.captura_mensagem_whatsapp || MENSAGEM_CAPTURA_PADRAO.whatsapp}</Balao>
+            <RespostaPessoa>47 99999-9999</RespostaPessoa>
           </>
         )}
         <Rotulo>entrega</Rotulo>
@@ -558,6 +574,10 @@ export function FormAutomacao({
       </aside>
     </form>
   );
+}
+
+function RespostaPessoa({ children }: { children: React.ReactNode }) {
+  return <div className="max-w-[70%] self-end rounded-2xl rounded-br bg-[#EDE7F6] px-3.5 py-2.5 text-sm text-tinta-2">{children}</div>;
 }
 
 function Rotulo({ children }: { children: React.ReactNode }) {
