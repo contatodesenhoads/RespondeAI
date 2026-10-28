@@ -18,6 +18,13 @@ export async function confirmarAcesso(form: FormData) {
 
   const supabase = await supabaseServidor();
   const { error } = await supabase.auth.verifyOtp({ type: tipo as EmailOtpType, token_hash: tokenHash });
-  if (error) redirect("/login?erro=link");
-  redirect(destino);
+  if (!error) redirect(destino);
+
+  // Link já usado ou vencido, mas a pessoa já entrou por ele neste navegador:
+  // segue para a criação de senha em vez de mostrar erro.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) redirect("/definir-senha");
+  redirect("/login?erro=link");
 }

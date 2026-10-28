@@ -49,7 +49,8 @@ export async function middleware(request: NextRequest) {
 
   if (user && caminho === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = request.nextUrl.searchParams.get("erro") === "link" ? "/definir-senha" : "/";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 

@@ -127,7 +127,8 @@ export default async function ConectarInstagram({
       </main>
 
       <p className="text-[13px] text-suave">
-        Um produto Desenho Ads · <Link href="/privacidade">Política de privacidade</Link>
+        Um produto Desenho Ads · <Link href="/privacidade">Política de privacidade</Link> ·{" "}
+        <Link href="/definir-senha">Criar ou trocar minha senha</Link>
         {reconexao && (
           <> · <Link href="/inicio">Voltar ao painel</Link></>
         )}
