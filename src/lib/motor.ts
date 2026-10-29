@@ -255,6 +255,9 @@ export async function processarMensagem(conta: Conta, ev: EventoMensagem) {
   const igsid = ev.sender.id;
   if (!igsid || igsid === conta.ig_user_id) return;
 
+  // A pessoa respondeu: a conversa está ativa, então o remarketing pendente perde o sentido.
+  await cancelarRemarketingsDaPessoa(conta.cliente_id, igsid);
+
   const payload = ev.postback?.payload ?? ev.message?.quick_reply?.payload ?? "";
 
   if (payload.startsWith(PAYLOAD_QUERO)) {
@@ -533,6 +536,19 @@ async function enviarMidia(conta: Conta, auto: Automacao, igsid: string) {
     // Último recurso: manda o arquivo como link, para a pessoa não ficar sem.
     await enviarMensagem(conta.token, igsid, { text: `Seu arquivo: ${auto.midia_url}` });
     await registrar(conta.cliente_id, "erro", auto.id, undefined, { etapa: "entrega_midia", erro: textoErro(e) });
+  }
+}
+
+async function cancelarRemarketingsDaPessoa(clienteId: string, igsid: string) {
+  try {
+    await supabaseAdmin()
+      .from("envios_agendados")
+      .update({ status: "cancelado", erro: "pessoa respondeu antes do horário" })
+      .eq("cliente_id", clienteId)
+      .eq("igsid", igsid)
+      .eq("status", "pendente");
+  } catch {
+    // não impede o resto do atendimento
   }
 }
 

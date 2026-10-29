@@ -508,7 +508,7 @@ export function FormAutomacao({
                   </option>
                 ))}
               </select>
-              <p className={ajuda}>Pela regra do Instagram, só dá para mandar até 24 horas depois da última interação da pessoa, por isso o máximo é 23 horas. Se ela responder, a conversa continua no seu direct.</p>
+              <p className={ajuda}>Pela regra do Instagram, só dá para mandar até 24 horas depois da última interação da pessoa, por isso o máximo é 23 horas. Se ela responder antes do horário, o remarketing é cancelado e a conversa continua no seu direct.</p>
             </div>
           )}
         </Secao>
